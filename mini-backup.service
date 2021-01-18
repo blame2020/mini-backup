@@ -1,0 +1,12 @@
+[Unit]
+Description=Mini Backup
+After=multi-user.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/sbin/mini-backup
+RemainAfterExit=no
+
+[Install]
+WantedBy=multi-user.target

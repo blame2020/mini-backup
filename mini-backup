@@ -1,0 +1,49 @@
+#!/usr/bin/bash
+
+SCRIPT_DIR="$(cd $(dirname $0); pwd)"
+BACKUP_STORAGE=${BACKUP_STORAGE:-/backup}
+BACKUP_TARGETS_FILE=${BACKUP_TARGETS:-/etc/mini-backup/targets}
+DRYRUN=""
+WEEK=$(date "+%w")
+LINK_DEST_BASE="$BACKUP_STORAGE/0"
+
+if [ "x$1"  = "x-n" ]; then
+    DRYRUN="-n"
+    shift
+fi
+
+if [ "x$1" = "xinstall" ]; then
+   cp "$SCRIPT_DIR/mini-backup" /usr/sbin/mini-backup
+   cp "$SCRIPT_DIR/mini-backup.service" /usr/lib/systemd/system/mini-backup.service
+   cp "$SCRIPT_DIR/mini-backup.timer" /usr/lib/systemd/system/mini-backup.timer
+   mkdir -p /etc/mini-backup/
+   cp "$SCRIPT_DIR/targets" /etc/mini-backup/targets
+   systemctl daemon-reload
+   systemctl enable mini-backup.service
+   systemctl enable mini-backup.timer
+   systemctl start mini-backup.timer
+   exit 0
+fi
+
+if [ "$WEEK" = 0 -o -z "$(ls "$BACKUP_STORAGE")" ]; then
+    rm -rf "$BACKUP_STORAGE"/*
+fi
+
+# create directories into backup storage
+cat "${BACKUP_TARGETS_FILE}" | xargs -I{} -n1 mkdir -p "$BACKUP_STORAGE/${WEEK}/{}"
+
+# backup
+if [ $WEEK = 0 -o -z $(ls "$LINK_DEST_BASE") ]; then
+    rm -rf "$BACKUP_STORAGE"/[1-6]
+    echo hoge
+    cat "$BACKUP_TARGETS_FILE" |
+        xargs -I{} -n1 rsync -av $DRYRUN --delete {} "$BACKUP_STORAGE/${WEEK}{}" || exit -1
+else
+    cat "$BACKUP_TARGETS_FILE" |
+        xargs -I{} -n1 mkdir -p "$LINK_DEST_BASE{}" || exit -1
+
+    cat "$BACKUP_TARGETS_FILE" |
+        xargs -I{} -n1 rsync -av $DRYRUN --delete --link-dest="$LINK_DEST_BASE/{}" {} "$BACKUP_STORAGE/${WEEK}{}" || exit -1
+fi
+
+sync
